@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+
 
 @RestController
 @RequestMapping("/logs")
@@ -20,7 +22,7 @@ public class LogController {
     private ListLogsRequestValidator listLogsRequestValidator;
 
     @GetMapping
-    public ResponseEntity<ListLogsResponse> listLogs(@ModelAttribute ListLogsRequest request) {
+    public ResponseEntity<ListLogsResponse> listLogs(@ModelAttribute ListLogsRequest request) throws IOException {
         listLogsRequestValidator.validate(request);
         ListLogsResponse response = logService.listLogs(request);
         return ResponseEntity.ok(response);

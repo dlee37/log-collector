@@ -12,7 +12,7 @@ public class ListLogsRequest {
 
     private String searchTerm;
 
-    private Integer limit = 20; // default limit
+    private Integer limit; // default limit
 
-    private Long nextLine = 0L;
+    private Long nextLine;
 }

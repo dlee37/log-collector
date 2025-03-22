@@ -13,7 +13,7 @@ public class ListLogsRequestValidator {
                     "fileName cannot be missing or empty. fileName is also case sensitive!");
         }
 
-        if (request.getLimit() < 1 || request.getLimit() > 1000) {
+        if (request.getLimit() != null && (request.getLimit() < 1 || request.getLimit() > 1000)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Limit must be between 1 and 1000");
         }
     }
