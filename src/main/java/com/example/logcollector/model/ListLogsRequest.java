@@ -9,6 +9,10 @@ import lombok.Setter;
 @Builder
 public class ListLogsRequest {
     private String fileName;
+
     private String searchTerm;
-    private int limit = 20;
+
+    private Integer limit = 20; // default limit
+
+    private Long nextLine = 0L;
 }
