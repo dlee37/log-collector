@@ -17,11 +17,15 @@ import java.io.IOException;
 @RestController
 @RequestMapping("/logs")
 public class LogController {
-    @Autowired
-    private LogService logService;
+    private final LogService logService;
+
+    private final ListLogsRequestValidator listLogsRequestValidator;
 
     @Autowired
-    private ListLogsRequestValidator listLogsRequestValidator;
+    public LogController(LogService logService, ListLogsRequestValidator listLogsRequestValidator) {
+        this.logService = logService;
+        this.listLogsRequestValidator = listLogsRequestValidator;
+    }
 
     @GetMapping
     public ResponseEntity<ListLogsResponse> listLogs(@ModelAttribute ListLogsRequest request) throws IOException {

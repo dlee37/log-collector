@@ -35,7 +35,7 @@ public class LogCache implements Cache<ListLogsRequest, ListLogsResponse> {
 
     public String buildCacheKey(ListLogsRequest request) {
         return String.format("%s|%s|%s|%s",
-                request.getFileName(),
+                request.getFileName() == null ? "" : request.getFileName(),
                 request.getSearchTerm() == null ? "" : request.getSearchTerm(),
                 request.getOffset() == null ? 0 : request.getOffset(),
                 request.getLimit() == null ? 100L : request.getLimit());

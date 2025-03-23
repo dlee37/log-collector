@@ -70,7 +70,7 @@ ENTRYPOINT ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,addre
 
 ### 3. Build the Image
 ```bash
-docker build -t log-collector:debug
+docker build -t log-collector:debug .
 ```
 
 ### 4. Run the container with debug port exposed

@@ -8,6 +8,7 @@ import com.example.logcollector.model.LogPage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StopWatch;
@@ -27,8 +28,14 @@ import static com.example.logcollector.constants.Constants.CHUNK_SIZE;
 public class LogService {
     private static final Logger logger = LoggerFactory.getLogger(LogService.class);
 
+    private final Cache<ListLogsRequest, ListLogsResponse> cache;
+    private final String logPath;
+
     @Autowired
-    private Cache<ListLogsRequest, ListLogsResponse> cache;
+    public LogService(Cache<ListLogsRequest, ListLogsResponse> cache, @Value("/var/log") String logPath) {
+        this.cache = cache;
+        this.logPath = logPath;
+    }
 
     public ListLogsResponse listLogs(ListLogsRequest request) throws IOException {
         if (cache.isCacheable(request)) {
@@ -71,7 +78,7 @@ public class LogService {
         if (fileName == null || fileName.isBlank()) {
             logger.warn("No file specified, defaulting to syslog or messages...");
             for (String logFile : Constants.DEFAULT_LOG_FILES) {
-                File file = new File(String.format("%s/%s", Constants.LOG_PATH, logFile));
+                File file = new File(String.format("%s/%s", logPath, logFile));
                 if (file.exists()) {
                     return file;
                 }
@@ -79,14 +86,14 @@ public class LogService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "syslog or messages log file does not exist!");
         }
 
-        File file = new File(String.format("%s/%s", Constants.LOG_PATH, fileName));
+        File file = new File(String.format("%s/%s", logPath, fileName));
         logger.info("File is: {}", file.isFile());
         if (!file.exists()) {
-            File logDirectory = new File(Constants.LOG_PATH);
+            File logDirectory = new File(logPath);
             File[] files = logDirectory.listFiles(f ->
                     f.isFile() && !f.getName().endsWith(".gz") && !f.getName().startsWith("."));
             if (files == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("No files exist in %s!", Constants.LOG_PATH));
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("No files exist in %s!", logPath));
             }
             String fullFileList = Arrays.stream(files).map(File::getName).collect(Collectors.joining(", "));
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File not found. List of files include: %s", fullFileList));
@@ -139,7 +146,7 @@ public class LogService {
         }
 
         // process the first line of the file since there are no more \n characters to process
-        processFirstLine(linesFound, limit, currentLine, searchTerm, logs);
+        hasMore = processFirstLine(linesFound, limit, currentLine, searchTerm, logs, hasMore);
 
         return LogPage.builder()
                 .logs(logs)
@@ -147,16 +154,24 @@ public class LogService {
                 .build();
     }
 
-    private void processFirstLine(int linesFound,
-                                  int limit,
-                                  StringBuilder currentLine,
-                                  String searchTerm,
-                                  List<String> logs) {
+    private boolean processFirstLine(int linesFound,
+                                     int limit,
+                                     StringBuilder currentLine,
+                                     String searchTerm,
+                                     List<String> logs,
+                                     boolean hasMore) {
+        boolean updatedHasMore = hasMore;
         if (linesFound < limit && !currentLine.isEmpty()) {
             String line = currentLine.reverse().toString();
-            if (searchTerm == null || line.contains(searchTerm)) {
+            if (searchTerm == null || line.toLowerCase().contains(searchTerm)) {
                 logs.add(line.trim());
             }
+        } else if (!updatedHasMore) {
+            String line = currentLine.reverse().toString();
+            if (searchTerm == null || line.toLowerCase().contains(searchTerm)) {
+                updatedHasMore = true;
+            }
         }
+        return updatedHasMore;
     }
 }
