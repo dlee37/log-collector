@@ -89,3 +89,19 @@ docker run -p 8080:8080 -p 5005:5005 -v "$(pwd)/sample-logs:/var/log" log-collec
 - Cache auto evicts every 2 minutes or when LRU cap is hit
 - Supports pagination
 - Debug friendly Dockerfile
+
+## Design Overview
+- **Controller Layer**: Accepts incoming HTTP requests and delegates to services.
+- **Service Layer**: Reads files from the end of the file with 4KB chunks in reverse using Java's built in RandomAccessFile class
+- **Models**: DTO for request and response for better modularity
+- **Caching**: In-memory TTL and LRU cache using Java's built in LinkedHashMap to cache more detailed requests (search term, larger offsets)
+- **Paging**: Pages requests to not overwhelm responses
+- **Timeout Handling**: Custom Timeout utility to handle long-lasting requests
+- **Docker Runtime**: Mounts local files directly to /var/log
+
+## Testing
+- To run all the unit tests, run the following command:
+```bash
+mvn test
+```
+`mvn clean install` will also run all tests and build the jar.

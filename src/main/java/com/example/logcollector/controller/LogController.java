@@ -36,7 +36,7 @@ public class LogController {
     }
 
     @GetMapping
-    public ResponseEntity<ListLogsResponse> listLogs(@ModelAttribute ListLogsRequest request) throws IOException {
+    public ResponseEntity<ListLogsResponse> listLogs(@ModelAttribute ListLogsRequest request) {
         try {
             listLogsRequestValidator.validate(request);
             ListLogsResponse response = timeoutExecutor.runWithTimeout(
