@@ -14,7 +14,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.example.logcollector.constants.Constants.CHUNK_SIZE;
 
@@ -26,30 +28,65 @@ public class LogService {
         String fileName = request.getFileName();
         String searchTerm = request.getSearchTerm();
         int limit = request.getLimit() == null ? Constants.DEFAULT_LIMIT : request.getLimit();
-        File file = new File(String.format("%s/%s", Constants.SAMPLE_LOG_PATH, fileName));
-        if (!file.exists()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found");
-        }
+        File file = validateFile(fileName);
         StopWatch watch = new StopWatch();
         watch.start();
         String requestString = String.format("file: %s, searchTerm: %s, limit: %s", fileName, searchTerm, limit);
         logger.info("Received list logs request for request: {}", requestString);
         // start of the business logic here
+        List<String> logs = processLogsInReverse(file, searchTerm, limit);
+
+        watch.stop();
+        logger.info("Logs for request {} took {} ms", requestString, watch.getTotalTimeMillis());
+        return ListLogsResponse.builder()
+                .logs(logs)
+                .build();
+    }
+
+    private File validateFile(String fileName) {
+        if (fileName == null || fileName.isBlank()) {
+            logger.warn("No file specified, defaulting to syslog or messages...");
+            for (String logFile : Constants.DEFAULT_LOG_FILES) {
+                File file = new File(String.format("%s/%s", Constants.SAMPLE_LOG_PATH, logFile));
+                if (file.exists()) {
+                    return file;
+                }
+            }
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "syslog or messages log file does not exist!");
+        }
+
+        File file = new File(String.format("%s/%s", Constants.SAMPLE_LOG_PATH, fileName));
+        logger.info("File is: {}", file.isFile());
+        if (!file.exists()) {
+            File logDirectory = new File(Constants.SAMPLE_LOG_PATH);
+            File[] files = logDirectory.listFiles(f ->
+                    f.isFile() && !f.getName().endsWith(".gz") && !f.getName().startsWith("."));
+            if (files == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("No files exist in %s!", Constants.SAMPLE_LOG_PATH));
+            }
+            String fullFileList = Arrays.stream(files).map(File::getName).collect(Collectors.joining(", "));
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File not found. List of files include: %s", fullFileList));
+        } else if (!file.isFile()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File %s must be a valid file, not a directory!", fileName));
+        }
+        return file;
+    }
+
+    private List<String> processLogsInReverse(File file, String searchTerm, int limit) throws IOException {
         List<String> logs = new ArrayList<>();
-        int linesFound = 0;
-        byte[] chunks = new byte[CHUNK_SIZE];
+        byte[] chunk = new byte[CHUNK_SIZE];
         StringBuilder currentLine = new StringBuilder();
+        int linesFound = 0;
+
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
-            // go to the end of the file initially
             long filePointer = raf.length();
             while (filePointer > 0 && linesFound < limit) {
                 int bytesToRead = (int) Math.min(CHUNK_SIZE, filePointer);
-                // load the chunk into memory
                 filePointer -= bytesToRead;
                 raf.seek(filePointer);
-                raf.readFully(chunks, 0, bytesToRead);
+                raf.readFully(chunk, 0, bytesToRead);
                 for (int i = bytesToRead - 1; i >= 0; i--) {
-                    char c = (char) chunks[i];
+                    char c = (char) chunk[i];
                     if (c == '\n') {
                         if (!currentLine.isEmpty()) {
                             String line = currentLine.reverse().toString();
@@ -70,17 +107,21 @@ public class LogService {
         }
 
         // process the first line of the file since there are no more \n characters to process
+        processFirstLine(linesFound, limit, currentLine, searchTerm, logs);
+
+        return logs;
+    }
+
+    private void processFirstLine(int linesFound,
+                                  int limit,
+                                  StringBuilder currentLine,
+                                  String searchTerm,
+                                  List<String> logs) {
         if (linesFound < limit && !currentLine.isEmpty()) {
             String line = currentLine.reverse().toString();
             if (searchTerm == null || line.contains(searchTerm)) {
                 logs.add(line.trim());
             }
         }
-
-        watch.stop();
-        logger.info("Logs for request {} took {} ms", requestString, watch.getTotalTimeMillis());
-        return ListLogsResponse.builder()
-                .logs(logs)
-                .build();
     }
 }
