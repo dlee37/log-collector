@@ -1,11 +1,13 @@
 package com.example.logcollector.service;
 
+import com.example.logcollector.cache.Cache;
 import com.example.logcollector.constants.Constants;
 import com.example.logcollector.model.ListLogsRequest;
 import com.example.logcollector.model.ListLogsResponse;
 import com.example.logcollector.model.LogPage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StopWatch;
@@ -25,7 +27,17 @@ import static com.example.logcollector.constants.Constants.CHUNK_SIZE;
 public class LogService {
     private static final Logger logger = LoggerFactory.getLogger(LogService.class);
 
+    @Autowired
+    private Cache<ListLogsRequest, ListLogsResponse> cache;
+
     public ListLogsResponse listLogs(ListLogsRequest request) throws IOException {
+        if (cache.isCacheable(request)) {
+            String key = cache.buildCacheKey(request);
+            ListLogsResponse cachedResponse = cache.get(key);
+            if (cachedResponse != null) {
+                return cachedResponse;
+            }
+        }
         String fileName = request.getFileName();
         String searchTerm = request.getSearchTerm();
         int limit = request.getLimit() == null ? Constants.DEFAULT_LIMIT : request.getLimit();
@@ -40,20 +52,25 @@ public class LogService {
 
         watch.stop();
         logger.info("Logs for request {} took {} ms", requestString, watch.getTotalTimeMillis());
-        return ListLogsResponse.builder()
+        ListLogsResponse response = ListLogsResponse.builder()
                 .logs(page.getLogs())
                 .hasMore(page.getHasMore())
                 .offset(offset)
                 .limit(limit)
                 .nextOffset(offset + page.getLogs().size())
                 .build();
+
+        if (cache.isCacheable(request)) {
+            cache.put(cache.buildCacheKey(request), response);
+        }
+        return response;
     }
 
     private File validateFile(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             logger.warn("No file specified, defaulting to syslog or messages...");
             for (String logFile : Constants.DEFAULT_LOG_FILES) {
-                File file = new File(String.format("%s/%s", Constants.SAMPLE_LOG_PATH, logFile));
+                File file = new File(String.format("%s/%s", Constants.LOG_PATH, logFile));
                 if (file.exists()) {
                     return file;
                 }
@@ -61,14 +78,14 @@ public class LogService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "syslog or messages log file does not exist!");
         }
 
-        File file = new File(String.format("%s/%s", Constants.SAMPLE_LOG_PATH, fileName));
+        File file = new File(String.format("%s/%s", Constants.LOG_PATH, fileName));
         logger.info("File is: {}", file.isFile());
         if (!file.exists()) {
-            File logDirectory = new File(Constants.SAMPLE_LOG_PATH);
+            File logDirectory = new File(Constants.LOG_PATH);
             File[] files = logDirectory.listFiles(f ->
                     f.isFile() && !f.getName().endsWith(".gz") && !f.getName().startsWith("."));
             if (files == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("No files exist in %s!", Constants.SAMPLE_LOG_PATH));
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("No files exist in %s!", Constants.LOG_PATH));
             }
             String fullFileList = Arrays.stream(files).map(File::getName).collect(Collectors.joining(", "));
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File not found. List of files include: %s", fullFileList));
