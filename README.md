@@ -21,4 +21,4 @@ This service allows on-demand monitoring of log files without needing direct SSH
 
 ### **Clone the Repository**
 ```sh
-git clone https://github.com/YOUR_USERNAME/log-collector-service.git
+git clone https://github.com/dlee37/log-collector-service.git
