@@ -3,6 +3,7 @@ package com.example.logcollector.service;
 import com.example.logcollector.constants.Constants;
 import com.example.logcollector.model.ListLogsRequest;
 import com.example.logcollector.model.ListLogsResponse;
+import com.example.logcollector.model.LogPage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -28,18 +29,23 @@ public class LogService {
         String fileName = request.getFileName();
         String searchTerm = request.getSearchTerm();
         int limit = request.getLimit() == null ? Constants.DEFAULT_LIMIT : request.getLimit();
+        long offset = request.getOffset() == null ? 0 : request.getOffset();
         File file = validateFile(fileName);
         StopWatch watch = new StopWatch();
         watch.start();
         String requestString = String.format("file: %s, searchTerm: %s, limit: %s", fileName, searchTerm, limit);
         logger.info("Received list logs request for request: {}", requestString);
         // start of the business logic here
-        List<String> logs = processLogsInReverse(file, searchTerm, limit);
+        LogPage page = processLogsInReverse(file, searchTerm, limit, offset);
 
         watch.stop();
         logger.info("Logs for request {} took {} ms", requestString, watch.getTotalTimeMillis());
         return ListLogsResponse.builder()
-                .logs(logs)
+                .logs(page.getLogs())
+                .hasMore(page.getHasMore())
+                .offset(offset)
+                .limit(limit)
+                .nextOffset(offset + page.getLogs().size())
                 .build();
     }
 
@@ -72,11 +78,13 @@ public class LogService {
         return file;
     }
 
-    private List<String> processLogsInReverse(File file, String searchTerm, int limit) throws IOException {
+    private LogPage processLogsInReverse(File file, String searchTerm, int limit, long offset) throws IOException {
         List<String> logs = new ArrayList<>();
         byte[] chunk = new byte[CHUNK_SIZE];
         StringBuilder currentLine = new StringBuilder();
         int linesFound = 0;
+        int linesSkipped = 0;
+        boolean hasMore = false;
 
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
             long filePointer = raf.length();
@@ -92,9 +100,15 @@ public class LogService {
                             String line = currentLine.reverse().toString();
                             currentLine.setLength(0);
                             if (searchTerm == null || line.contains(searchTerm)) {
-                                logs.add(line.trim());
-                                linesFound++;
-                                if (linesFound == limit) {
+                                if (linesSkipped < offset) {
+                                    linesSkipped++;
+                                    continue;
+                                }
+                                if (linesFound < limit) {
+                                    logs.add(line.trim());
+                                    linesFound++;
+                                } else {
+                                    hasMore = true;
                                     break;
                                 }
                             }
@@ -109,7 +123,10 @@ public class LogService {
         // process the first line of the file since there are no more \n characters to process
         processFirstLine(linesFound, limit, currentLine, searchTerm, logs);
 
-        return logs;
+        return LogPage.builder()
+                .logs(logs)
+                .hasMore(hasMore)
+                .build();
     }
 
     private void processFirstLine(int linesFound,

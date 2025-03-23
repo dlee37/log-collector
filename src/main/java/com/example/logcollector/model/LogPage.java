@@ -1,20 +1,16 @@
 package com.example.logcollector.model;
 
 import lombok.Builder;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.List;
 
-@Data
 @Builder
-public class ListLogsResponse {
+@Getter
+@Setter
+public class LogPage {
     private List<String> logs;
 
-    private Long offset;
-
-    private Integer limit;
-
     private Boolean hasMore;
-
-    private Long nextOffset;
 }
