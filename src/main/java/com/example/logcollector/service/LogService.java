@@ -35,6 +35,7 @@ public class LogService {
             String key = cache.buildCacheKey(request);
             ListLogsResponse cachedResponse = cache.get(key);
             if (cachedResponse != null) {
+                logger.info("Found cache hit! Returning from cache");
                 return cachedResponse;
             }
         }
@@ -48,7 +49,7 @@ public class LogService {
         String requestString = String.format("file: %s, searchTerm: %s, limit: %s", fileName, searchTerm, limit);
         logger.info("Received list logs request for request: {}", requestString);
         // start of the business logic here
-        LogPage page = processLogsInReverse(file, searchTerm, limit, offset);
+        LogPage page = processLogsInReverse(file, searchTerm.toLowerCase(), limit, offset);
 
         watch.stop();
         logger.info("Logs for request {} took {} ms", requestString, watch.getTotalTimeMillis());
@@ -116,7 +117,7 @@ public class LogService {
                         if (!currentLine.isEmpty()) {
                             String line = currentLine.reverse().toString();
                             currentLine.setLength(0);
-                            if (searchTerm == null || line.contains(searchTerm)) {
+                            if (searchTerm == null || line.toLowerCase().contains(searchTerm)) {
                                 if (linesSkipped < offset) {
                                     linesSkipped++;
                                     continue;
