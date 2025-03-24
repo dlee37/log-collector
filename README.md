@@ -111,3 +111,6 @@ mvn test
 - No rate limiting or user-based throttling is implemented
 - Only opens plain text files (does not decompress)
   - Assumes that users will only try to filter on the latest logs and not ones in "cold storage"
+
+## APIs
+The full YAML file can be found in [api-docs.yaml](./src/main/resources/static/api-docs.yaml)
