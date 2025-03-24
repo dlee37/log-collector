@@ -1,49 +1,87 @@
 openapi: 3.1.0
 info:
-  title: OpenAPI definition
-  version: v0
+  title: Log Collector API
+  version: v1
 servers:
-- url: http://localhost:8080
-  description: Generated server url
+  - url: http://localhost:8080
+    description: Local server
 paths:
-  /logs:
+  /logs/entries:
     get:
       tags:
-      - log-controller
-      operationId: listLogs
+        - log-controller
+      summary: List log entries from a file
+      operationId: listLogEntries
       parameters:
-      - name: request
-        in: query
-        required: true
-        schema:
-          $ref: "#/components/schemas/ListLogsRequest"
+        - name: fileName
+          in: query
+          required: false
+          schema:
+            type: string
+          description: The log file name under /var/log
+        - name: searchTerm
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Keyword to filter lines
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+          description: Max number of entries to return (default 100)
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Offset for pagination
       responses:
-        "200":
-          description: OK
+        '200':
+          description: Successful response with log lines
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: "#/components/schemas/ListLogsResponse"
+                $ref: '#/components/schemas/ListEntriesResponse'
+        '400':
+          description: Invalid query parameters
+        '404':
+          description: File does not exist
+        '500':
+          description: Internal server error
+  /logs/files:
+    get:
+      tags:
+        - log-controller
+      summary: List available log files in /var/log
+      operationId: listLogFiles
+      responses:
+        '200':
+          description: Successful response with available file names
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilesResponse'
+  /health:
+    get:
+      tags:
+        - health-controller
+      summary: Health check endpoint
+      operationId: getHealth
+      responses:
+        '200':
+          description: Health check OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+
 components:
   schemas:
-    ListLogsRequest:
-      type: object
-      properties:
-        fileName:
-          type: string
-          description: the name of the file
-        searchTerm:
-          type: string
-          description: the search term
-        limit:
-          type: integer
-          format: int32
-          description: number of logs in the response. Max 1000
-        offset:
-          type: integer
-          format: int64
-          description: the offset
-    ListLogsResponse:
+    ListEntriesResponse:
       type: object
       properties:
         logs:
@@ -61,3 +99,22 @@ components:
         nextOffset:
           type: integer
           format: int64
+
+    ListFilesResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: string
+
+    HealthCheckResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

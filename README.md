@@ -13,10 +13,10 @@ This service allows on-demand monitoring of log files without needing direct SSH
 ---
 
 ### **Prerequisites**
-- Java 21+
-- Maven (for dependency management)
-- Docker (optional but highly recommended)
-- Intellij (optional but highly recommended)
+- [Java 21+](https://www.oracle.com/java/technologies/downloads/#java21)
+- [Maven](https://maven.apache.org/install.html)
+- [Docker](https://www.docker.com/products/docker-desktop/)
+- [Intellij](https://www.jetbrains.com/idea/download/) (if developing, but can use any IDE)
 
 ## Installation & Setup
 
@@ -45,7 +45,7 @@ docker build -t log-collector:latest .
 docker run -p 8080:8080 -v "$(pwd)/sample-logs:/var/log" log-collector:latest
 ```
 
-## Running with Debugger Enabled
+## Running with Debugger Enabled (development)
 To enable remote debugging (e.g., for IntelliJ or VS Code), update your `Dockerfile` to expose the debugger and include the appropriate JVM flags.
 
 ### 1. Modify the Dockerfile
@@ -89,6 +89,7 @@ docker run -p 8080:8080 -p 5005:5005 -v "$(pwd)/sample-logs:/var/log" log-collec
 - Cache auto evicts every 2 minutes or when LRU cap is hit
 - Supports pagination
 - Debug friendly Dockerfile
+- Has another endpoint for users to list all files in /var/log
 
 ## Design Overview
 - **Controller Layer**: Accepts incoming HTTP requests and delegates to services.
@@ -96,7 +97,7 @@ docker run -p 8080:8080 -p 5005:5005 -v "$(pwd)/sample-logs:/var/log" log-collec
 - **Models**: DTO for request and response for better modularity
 - **Caching**: In-memory TTL and LRU cache using Java's built in LinkedHashMap to cache more detailed requests (search term, larger offsets)
 - **Paging**: Pages requests to not overwhelm responses
-- **Timeout Handling**: Custom Timeout utility to handle long-lasting requests
+- **Timeout Handling**: Custom Timeout utility to handle long-lasting requests (60 second max)
 - **Docker Runtime**: Mounts local files directly to /var/log
 
 ## Testing
@@ -105,3 +106,8 @@ docker run -p 8080:8080 -p 5005:5005 -v "$(pwd)/sample-logs:/var/log" log-collec
 mvn test
 ```
 `mvn clean install` will also run all tests and build the jar.
+
+## Known Limitations
+- No rate limiting or user-based throttling is implemented
+- Only opens plain text files (does not decompress)
+  - Assumes that users will only try to filter on the latest logs and not ones in "cold storage"
