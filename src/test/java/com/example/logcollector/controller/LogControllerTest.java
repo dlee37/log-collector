@@ -1,8 +1,10 @@
 package com.example.logcollector.controller;
 
-import com.example.logcollector.model.ListLogsRequest;
-import com.example.logcollector.model.ListLogsResponse;
+import com.example.logcollector.model.logs.ListEntriesRequest;
+import com.example.logcollector.model.logs.ListEntriesResponse;
+import com.example.logcollector.model.logs.ListFilesResponse;
 import com.example.logcollector.service.LogService;
+import com.example.logcollector.util.RequestIdGenerator;
 import com.example.logcollector.util.TimeoutExecutor;
 import com.example.logcollector.validation.ListLogsRequestValidator;
 import org.junit.jupiter.api.AfterEach;
@@ -11,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.util.List;
@@ -32,13 +33,16 @@ public class LogControllerTest {
     private ListLogsRequestValidator mockListLogsRequestValidator;
     @Mock
     private TimeoutExecutor mockTimeoutExecutor;
+    @Mock
+    private RequestIdGenerator mockRequestIdGenerator;
 
     private AutoCloseable mocks;
 
     @BeforeEach
     public void init() {
         mocks = openMocks(this);
-        logController = new LogController(mockLogService, mockListLogsRequestValidator, mockTimeoutExecutor);
+        when(mockRequestIdGenerator.generateRequestId()).thenReturn("test-request-id");
+        logController = new LogController(mockLogService, mockListLogsRequestValidator, mockTimeoutExecutor, mockRequestIdGenerator);
     }
 
     @AfterEach
@@ -47,11 +51,20 @@ public class LogControllerTest {
     }
 
     @Test
-    public void listLogs_goesThroughPipeline_returnsResponse() throws IOException, ExecutionException, InterruptedException, TimeoutException {
-        doNothing().when(mockListLogsRequestValidator).validate(any(ListLogsRequest.class));
+    public void listLogEntries_goesThroughPipeline_returnsResponse() {
+        doNothing().when(mockListLogsRequestValidator).validate(any(ListEntriesRequest.class));
         when(mockTimeoutExecutor.runWithTimeout(any(Callable.class), anyLong(), any(TimeUnit.class)))
-                .thenReturn(ListLogsResponse.builder().logs(List.of("sample")).build());
-        ResponseEntity<ListLogsResponse> response = logController.listLogs(ListLogsRequest.builder().build());
+                .thenReturn(ListEntriesResponse.builder().logs(List.of("sample")).build());
+        ResponseEntity<ListEntriesResponse> response = logController.listLogEntries(ListEntriesRequest.builder().build());
+        assertNotNull(response.getBody());
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    @Test
+    public void listLogFiles_listFiles_returnsResponse() {
+        when(mockTimeoutExecutor.runWithTimeout(any(Callable.class), anyLong(), any(TimeUnit.class)))
+                .thenReturn(ListFilesResponse.builder().files(List.of("sample")).build());
+        ResponseEntity<ListFilesResponse> response = logController.listLogFiles();
         assertNotNull(response.getBody());
         assertEquals(HttpStatus.OK, response.getStatusCode());
     }

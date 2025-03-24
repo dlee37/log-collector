@@ -1,4 +1,4 @@
-package com.example.logcollector.model;
+package com.example.logcollector.model.logs;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -7,7 +7,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @Builder
-public class ListLogsRequest {
+public class ListEntriesRequest {
     private String fileName;
 
     private String searchTerm;

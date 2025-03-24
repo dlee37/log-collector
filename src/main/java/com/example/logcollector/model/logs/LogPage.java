@@ -1,4 +1,4 @@
-package com.example.logcollector.model;
+package com.example.logcollector.model.logs;
 
 import lombok.Builder;
 import lombok.Getter;

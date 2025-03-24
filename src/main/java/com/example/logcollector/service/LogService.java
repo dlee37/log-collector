@@ -2,9 +2,10 @@ package com.example.logcollector.service;
 
 import com.example.logcollector.cache.Cache;
 import com.example.logcollector.constants.Constants;
-import com.example.logcollector.model.ListLogsRequest;
-import com.example.logcollector.model.ListLogsResponse;
-import com.example.logcollector.model.LogPage;
+import com.example.logcollector.model.logs.ListEntriesRequest;
+import com.example.logcollector.model.logs.ListEntriesResponse;
+import com.example.logcollector.model.logs.ListFilesResponse;
+import com.example.logcollector.model.logs.LogPage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +21,6 @@ import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static com.example.logcollector.constants.Constants.CHUNK_SIZE;
 
@@ -28,57 +28,91 @@ import static com.example.logcollector.constants.Constants.CHUNK_SIZE;
 public class LogService {
     private static final Logger logger = LoggerFactory.getLogger(LogService.class);
 
-    private final Cache<ListLogsRequest, ListLogsResponse> cache;
+    private final Cache<ListEntriesRequest, ListEntriesResponse> cache;
     private final String logPath;
 
     @Autowired
-    public LogService(Cache<ListLogsRequest, ListLogsResponse> cache, @Value("/var/log") String logPath) {
+    public LogService(Cache<ListEntriesRequest, ListEntriesResponse> cache, @Value("/var/log") String logPath) {
         this.cache = cache;
         this.logPath = logPath;
     }
 
-    public ListLogsResponse listLogs(ListLogsRequest request) throws IOException, InterruptedException {
-        String fileName = request.getFileName();
-        String searchTerm = request.getSearchTerm();
-        int limit = request.getLimit() == null ? Constants.DEFAULT_LIMIT : request.getLimit();
-        long offset = request.getOffset() == null ? 0 : request.getOffset();
-        String requestString = String.format("file: %s, searchTerm: %s, limit: %s, offset: %s", fileName, searchTerm, limit, offset);
-        if (cache.isCacheable(request)) {
-            String key = cache.buildCacheKey(request);
-            ListLogsResponse cachedResponse = cache.get(key);
-            if (cachedResponse != null) {
-                logger.info("Found cache hit for request: {}! Returning from cache with list size: {}", requestString, cachedResponse.getLogs().size());
-                return cachedResponse;
+    public ListEntriesResponse listLogEntries(ListEntriesRequest request, String reqId) throws IOException, InterruptedException {
+        StopWatch watch = new StopWatch();
+        try {
+            String fileName = request.getFileName();
+            if (fileName == null || fileName.isBlank()) {
+                logger.info("No filename was specified, defaulting to syslog or messages");
+            }
+            String searchTerm = request.getSearchTerm() == null ? "" : request.getSearchTerm();
+            int limit = request.getLimit() == null ? Constants.DEFAULT_LIMIT : request.getLimit();
+            long offset = request.getOffset() == null ? 0 : request.getOffset();
+            String requestString = String.format("file: %s, searchTerm: %s, limit: %s, offset: %s, requestId: %s",
+                    fileName, searchTerm, limit, offset, reqId);
+            if (cache.isCacheable(request)) {
+                String key = cache.buildCacheKey(request);
+                ListEntriesResponse cachedResponse = cache.get(key);
+                if (cachedResponse != null) {
+                    logger.info("Found cache hit for request: {}! Returning from cache with list size: {}", requestString, cachedResponse.getLogs().size());
+                    return cachedResponse;
+                }
+            }
+
+            File file = validateFile(fileName);
+            watch.start();
+            logger.info("Received list entries request for request: {}", requestString);
+            LogPage page = processLogsInReverse(file, searchTerm.toLowerCase(), limit, offset);
+
+            watch.stop();
+            logger.info("Logs for request {} took {} ms", requestString, watch.getTotalTimeMillis());
+            ListEntriesResponse response = ListEntriesResponse.builder()
+                    .logs(page.getLogs())
+                    .hasMore(page.getHasMore())
+                    .offset(offset)
+                    .limit(limit)
+                    .nextOffset(offset + page.getLogs().size())
+                    .build();
+
+            // This is a swallowed return. In this situation the controller already returned the proper timeout error
+            if (Thread.currentThread().isInterrupted()) {
+                return response;
+            }
+
+            if (cache.isCacheable(request)) {
+                logger.info("Caching request: {}", requestString);
+                cache.put(cache.buildCacheKey(request), response);
+            }
+            return response;
+        } finally {
+            // stop the current stop watch
+            if (watch.isRunning()) {
+                watch.stop();
             }
         }
+    }
 
-        File file = validateFile(fileName);
+    public ListFilesResponse listLogFiles(String reqId) {
         StopWatch watch = new StopWatch();
-        watch.start();
-        logger.info("Received list logs request for request: {}", requestString);
-        // start of the business logic here
-        LogPage page = processLogsInReverse(file, searchTerm.toLowerCase(), limit, offset);
+        try {
+            watch.start();
+            logger.info("Starting request {} to list files", reqId);
+            List<String> fileList = getFullFileList();
+            watch.stop();
 
-        watch.stop();
-        logger.info("Logs for request {} took {} ms", requestString, watch.getTotalTimeMillis());
-        ListLogsResponse response = ListLogsResponse.builder()
-                .logs(page.getLogs())
-                .hasMore(page.getHasMore())
-                .offset(offset)
-                .limit(limit)
-                .nextOffset(offset + page.getLogs().size())
-                .build();
-
-        // This is a swallowed return. In this situation the controller already returned the proper timeout error
-        if (Thread.currentThread().isInterrupted()) {
-            return response;
+            // This is a swallowed return. In this situation the controller already returned the proper timeout error
+            if (Thread.currentThread().isInterrupted()) {
+                return ListFilesResponse.builder().build();
+            }
+            logger.info("request id {} took {} ms", reqId, watch.getTotalTimeMillis());
+            return ListFilesResponse.builder()
+                    .files(fileList)
+                    .build();
+        } finally {
+            // stop the current stop watch
+            if (watch.isRunning()) {
+                watch.stop();
+            }
         }
-
-        if (cache.isCacheable(request)) {
-            logger.info("Caching request: {}", requestString);
-            cache.put(cache.buildCacheKey(request), response);
-        }
-        return response;
     }
 
     private File validateFile(String fileName) {
@@ -95,21 +129,29 @@ public class LogService {
 
         File file = new File(String.format("%s/%s", logPath, fileName));
         if (!file.exists()) {
-            File logDirectory = new File(logPath);
-            File[] files = logDirectory.listFiles(f ->
-                    f.isFile() && !f.getName().endsWith(".gz") && !f.getName().startsWith("."));
-            if (files == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("No files exist in %s!", logPath));
-            }
-            String fullFileList = Arrays.stream(files).map(File::getName).collect(Collectors.joining(", "));
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File not found. List of files include: %s", fullFileList));
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found!");
         } else if (!file.isFile()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File %s must be a valid file, not a directory!", fileName));
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File %s must be a valid file!", fileName));
         }
         return file;
     }
 
-    private LogPage processLogsInReverse(File file, String searchTerm, int limit, long offset) throws IOException, InterruptedException {
+    private List<String> getFullFileList() {
+        File logDirectory = new File(logPath);
+        File[] files = logDirectory.listFiles(f ->
+                f.isFile() && !f.getName().endsWith(".gz") && !f.getName().startsWith("."));
+        if (files == null) {
+            return List.of();
+        }
+        List<String> fileList = Arrays.stream(files).map(File::getName).toList();
+        // This is a swallowed return. In this situation the controller already returned the proper timeout error
+        if (Thread.currentThread().isInterrupted()) {
+            return List.of();
+        }
+        return fileList;
+    }
+
+    private LogPage processLogsInReverse(File file, String searchTerm, int limit, long offset) throws IOException {
         List<String> logs = new ArrayList<>();
         byte[] chunk = new byte[CHUNK_SIZE];
         StringBuilder currentLine = new StringBuilder();
