@@ -61,7 +61,7 @@ public class LogServiceTest {
     }
 
     @Test
-    public void testListLogs_searchTerm_returnsFilteredResults() throws IOException {
+    public void testListLogs_searchTerm_returnsFilteredResults() throws IOException, InterruptedException {
         createLogFile(List.of(
                 "1 ERROR Something went wrong",
                 "2 INFO Starting system",
@@ -85,7 +85,7 @@ public class LogServiceTest {
     }
 
     @Test
-    public void testListLogs_listWithLimit_returnsPaginatedResults() throws IOException {
+    public void testListLogs_listWithLimit_returnsPaginatedResults() throws IOException, InterruptedException {
         createLogFile(List.of(
                 "1 ERROR Something went wrong",
                 "2 INFO Starting system",
@@ -138,7 +138,7 @@ public class LogServiceTest {
     }
 
     @Test
-    public void testListLogs_hasCache_returnsCachedInput() throws IOException {
+    public void testListLogs_hasCache_returnsCachedInput() throws IOException, InterruptedException {
         createLogFile(List.of(
                 "1 ERROR Something went wrong",
                 "2 INFO Starting system",

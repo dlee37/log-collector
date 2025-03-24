@@ -6,6 +6,8 @@ import com.example.logcollector.model.ListLogsResponse;
 import com.example.logcollector.service.LogService;
 import com.example.logcollector.util.TimeoutExecutor;
 import com.example.logcollector.validation.ListLogsRequestValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,12 +18,15 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.util.UUID;
 import java.util.concurrent.*;
 
 
 @RestController
 @RequestMapping("/logs")
 public class LogController {
+    private static final Logger logger = LoggerFactory.getLogger(LogController.class);
+
     private final LogService logService;
 
     private final ListLogsRequestValidator listLogsRequestValidator;
@@ -37,17 +42,13 @@ public class LogController {
 
     @GetMapping
     public ResponseEntity<ListLogsResponse> listLogs(@ModelAttribute ListLogsRequest request) {
-        try {
-            listLogsRequestValidator.validate(request);
-            ListLogsResponse response = timeoutExecutor.runWithTimeout(
-                    () -> logService.listLogs(request),
-                    Constants.MAX_REQUEST_TIMEOUT_IN_SECONDS,
-                    TimeUnit.SECONDS);
-            return ResponseEntity.ok(response);
-        } catch (TimeoutException e) {
-            throw new ResponseStatusException(HttpStatus.REQUEST_TIMEOUT, "Log retrieval timed out");
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error occurred");
-        }
+        String reqId = UUID.randomUUID().toString();
+        logger.info("Starting request id: {}", reqId);
+        listLogsRequestValidator.validate(request);
+        ListLogsResponse response = timeoutExecutor.runWithTimeout(
+                () -> logService.listLogs(request),
+                Constants.MAX_REQUEST_TIMEOUT_IN_SECONDS,
+                TimeUnit.SECONDS);
+        return ResponseEntity.ok(response);
     }
 }

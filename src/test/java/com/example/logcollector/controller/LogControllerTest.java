@@ -55,28 +55,4 @@ public class LogControllerTest {
         assertNotNull(response.getBody());
         assertEquals(HttpStatus.OK, response.getStatusCode());
     }
-
-    @Test
-    public void listLogs_timeout_throwsTimeoutError() throws IOException, ExecutionException, InterruptedException, TimeoutException {
-        doNothing().when(mockListLogsRequestValidator).validate(any(ListLogsRequest.class));
-        when(mockTimeoutExecutor.runWithTimeout(any(Callable.class), anyLong(), any(TimeUnit.class)))
-                .thenThrow(TimeoutException.class);
-        ResponseStatusException ex = assertThrows(
-                ResponseStatusException.class,
-                () -> logController.listLogs(ListLogsRequest.builder().build()));
-        assertEquals(HttpStatus.REQUEST_TIMEOUT, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Log retrieval timed out"));
-    }
-
-    @Test
-    public void listLogs_serverError_throwsError() throws IOException, ExecutionException, InterruptedException, TimeoutException {
-        doNothing().when(mockListLogsRequestValidator).validate(any(ListLogsRequest.class));
-        when(mockTimeoutExecutor.runWithTimeout(any(Callable.class), anyLong(), any(TimeUnit.class)))
-                .thenThrow(RuntimeException.class);
-        ResponseStatusException ex = assertThrows(
-                ResponseStatusException.class,
-                () -> logController.listLogs(ListLogsRequest.builder().build()));
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Internal server error occurred"));
-    }
 }

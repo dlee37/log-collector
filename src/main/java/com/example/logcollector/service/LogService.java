@@ -37,23 +37,24 @@ public class LogService {
         this.logPath = logPath;
     }
 
-    public ListLogsResponse listLogs(ListLogsRequest request) throws IOException {
-        if (cache.isCacheable(request)) {
-            String key = cache.buildCacheKey(request);
-            ListLogsResponse cachedResponse = cache.get(key);
-            if (cachedResponse != null) {
-                logger.info("Found cache hit! Returning from cache");
-                return cachedResponse;
-            }
-        }
+    public ListLogsResponse listLogs(ListLogsRequest request) throws IOException, InterruptedException {
         String fileName = request.getFileName();
         String searchTerm = request.getSearchTerm();
         int limit = request.getLimit() == null ? Constants.DEFAULT_LIMIT : request.getLimit();
         long offset = request.getOffset() == null ? 0 : request.getOffset();
+        String requestString = String.format("file: %s, searchTerm: %s, limit: %s, offset: %s", fileName, searchTerm, limit, offset);
+        if (cache.isCacheable(request)) {
+            String key = cache.buildCacheKey(request);
+            ListLogsResponse cachedResponse = cache.get(key);
+            if (cachedResponse != null) {
+                logger.info("Found cache hit for request: {}! Returning from cache with list size: {}", requestString, cachedResponse.getLogs().size());
+                return cachedResponse;
+            }
+        }
+
         File file = validateFile(fileName);
         StopWatch watch = new StopWatch();
         watch.start();
-        String requestString = String.format("file: %s, searchTerm: %s, limit: %s", fileName, searchTerm, limit);
         logger.info("Received list logs request for request: {}", requestString);
         // start of the business logic here
         LogPage page = processLogsInReverse(file, searchTerm.toLowerCase(), limit, offset);
@@ -68,7 +69,13 @@ public class LogService {
                 .nextOffset(offset + page.getLogs().size())
                 .build();
 
+        // This is a swallowed return. In this situation the controller already returned the proper timeout error
+        if (Thread.currentThread().isInterrupted()) {
+            return response;
+        }
+
         if (cache.isCacheable(request)) {
+            logger.info("Caching request: {}", requestString);
             cache.put(cache.buildCacheKey(request), response);
         }
         return response;
@@ -87,7 +94,6 @@ public class LogService {
         }
 
         File file = new File(String.format("%s/%s", logPath, fileName));
-        logger.info("File is: {}", file.isFile());
         if (!file.exists()) {
             File logDirectory = new File(logPath);
             File[] files = logDirectory.listFiles(f ->
@@ -103,7 +109,7 @@ public class LogService {
         return file;
     }
 
-    private LogPage processLogsInReverse(File file, String searchTerm, int limit, long offset) throws IOException {
+    private LogPage processLogsInReverse(File file, String searchTerm, int limit, long offset) throws IOException, InterruptedException {
         List<String> logs = new ArrayList<>();
         byte[] chunk = new byte[CHUNK_SIZE];
         StringBuilder currentLine = new StringBuilder();
@@ -114,6 +120,10 @@ public class LogService {
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
             long filePointer = raf.length();
             while (filePointer > 0 && linesFound < limit) {
+                // This is a swallowed return. In this situation the controller already returned the proper timeout error
+                if (Thread.currentThread().isInterrupted()) {
+                    return LogPage.builder().build();
+                }
                 int bytesToRead = (int) Math.min(CHUNK_SIZE, filePointer);
                 filePointer -= bytesToRead;
                 raf.seek(filePointer);
@@ -148,6 +158,7 @@ public class LogService {
         // process the first line of the file since there are no more \n characters to process
         hasMore = processFirstLine(linesFound, limit, currentLine, searchTerm, logs, hasMore);
 
+        logger.info("Number of logs retrieved: {}", logs.size());
         return LogPage.builder()
                 .logs(logs)
                 .hasMore(hasMore)

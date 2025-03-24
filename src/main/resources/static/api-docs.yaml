@@ -1,0 +1,63 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI definition
+  version: v0
+servers:
+- url: http://localhost:8080
+  description: Generated server url
+paths:
+  /logs:
+    get:
+      tags:
+      - log-controller
+      operationId: listLogs
+      parameters:
+      - name: request
+        in: query
+        required: true
+        schema:
+          $ref: "#/components/schemas/ListLogsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ListLogsResponse"
+components:
+  schemas:
+    ListLogsRequest:
+      type: object
+      properties:
+        fileName:
+          type: string
+          description: the name of the file
+        searchTerm:
+          type: string
+          description: the search term
+        limit:
+          type: integer
+          format: int32
+          description: number of logs in the response. Max 1000
+        offset:
+          type: integer
+          format: int64
+          description: the offset
+    ListLogsResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            type: string
+        offset:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+          format: int32
+        hasMore:
+          type: boolean
+        nextOffset:
+          type: integer
+          format: int64

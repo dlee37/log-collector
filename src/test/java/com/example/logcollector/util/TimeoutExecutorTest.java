@@ -2,6 +2,7 @@ package com.example.logcollector.util;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -26,7 +27,7 @@ public class TimeoutExecutorTest {
 
     @Test
     void runWithTimeout_timeout_throwsProperError() {
-        assertThrows(TimeoutException.class, () -> timeoutExecutor.runWithTimeout(() -> {
+        assertThrows(ResponseStatusException.class, () -> timeoutExecutor.runWithTimeout(() -> {
             Thread.sleep(1000);
             return "test";
         }, 500, TimeUnit.MILLISECONDS));
