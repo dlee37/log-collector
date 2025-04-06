@@ -40,6 +40,7 @@ public class LogService {
     public ListEntriesResponse listLogEntries(ListEntriesRequest request, String reqId) throws IOException, InterruptedException {
         StopWatch watch = new StopWatch();
         try {
+            watch.start();
             String fileName = request.getFileName();
             if (fileName == null || fileName.isBlank()) {
                 logger.info("No filename was specified, defaulting to syslog or messages");
@@ -59,7 +60,6 @@ public class LogService {
             }
 
             File file = validateFile(fileName);
-            watch.start();
             logger.info("Received list entries request for request: {}", requestString);
             LogPage page = processLogsInReverse(file, searchTerm.toLowerCase(), limit, offset);
 
@@ -115,7 +115,7 @@ public class LogService {
         }
     }
 
-    private File validateFile(String fileName) {
+    private File validateFile(String fileName) throws IOException {
         if (fileName == null || fileName.isBlank()) {
             logger.warn("No file specified, defaulting to syslog or messages...");
             for (String logFile : Constants.DEFAULT_LOG_FILES) {
@@ -128,8 +128,12 @@ public class LogService {
         }
 
         File file = new File(String.format("%s/%s", logPath, fileName));
+        String canonicalFileName = file.getCanonicalFile().toString();
+        if (!canonicalFileName.startsWith(logPath)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.format("File %s is not in /var/log!", fileName));
+        }
         if (!file.exists()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found!");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File %s not found!", fileName));
         } else if (!file.isFile()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, String.format("File %s must be a valid file!", fileName));
         }

@@ -26,10 +26,10 @@ COPY --from=builder /app/target/*.jar log-collector-service.jar
 EXPOSE 8080
 
 # Expose this port or any debugger port if running locally and want a debugger attached
-# EXPOSE 5005
+EXPOSE 5005
 
 # Run and comment out the below entry point if you are using a debugger on port 5005
-# ENTRYPOINT ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-jar", "log-collector-service.jar"]
+ENTRYPOINT ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-jar", "log-collector-service.jar"]
 
 # Main production, comment out if running the debugger
-ENTRYPOINT ["java", "-jar", "log-collector-service.jar"]
+# ENTRYPOINT ["java", "-jar", "log-collector-service.jar"]

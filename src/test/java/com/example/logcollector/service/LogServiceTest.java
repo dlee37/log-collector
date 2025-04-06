@@ -30,6 +30,8 @@ import static org.mockito.MockitoAnnotations.openMocks;
 
 public class LogServiceTest {
     private static final String LOG_NAME = "test.log";
+    private static final String OUTSIDE_LOG_FILE = "outside-log.log";
+    private static final String MAIN_DIR = "some-dir";
     private static final String REQUEST_ID = "test-request-id";
     private static final String SUB_DIR = "other-directory";
     private static final String SYSLOG = "syslog";
@@ -48,7 +50,8 @@ public class LogServiceTest {
     @BeforeEach
     public void init() throws IOException {
         mocks = openMocks(this);
-        logService = new LogService(mockCache, tempDir.toString());
+        File file = new File(tempDir.toFile(), MAIN_DIR);
+        logService = new LogService(mockCache, file.getCanonicalPath());
     }
 
     @AfterEach
@@ -57,8 +60,11 @@ public class LogServiceTest {
     }
 
     private void createLogFile(List<String> lines) throws IOException {
-        File file = tempDir.resolve(LOG_NAME).toFile();
-        File subDirectory = tempDir.resolve(SUB_DIR).toFile();
+        File file = tempDir.resolve(String.format("%s/%s", MAIN_DIR, LOG_NAME)).toFile();
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs();
+        }
+        File subDirectory = tempDir.resolve(String.format("%s/%s", MAIN_DIR, SUB_DIR)).toFile();
 
         try (FileWriter writer = new FileWriter(file)) {
             for (String line : lines) {
@@ -67,6 +73,16 @@ public class LogServiceTest {
         }
         if (!subDirectory.exists()) {
             subDirectory.mkdir();
+        }
+    }
+
+    private void createOutsideLogFile(List<String> lines) throws IOException {
+        File outsideFile = tempDir.resolve(OUTSIDE_LOG_FILE).toFile();
+
+        try (FileWriter writer = new FileWriter(outsideFile)) {
+            for (String line : lines) {
+                writer.write(line + "\n");
+            }
         }
     }
 
@@ -188,7 +204,7 @@ public class LogServiceTest {
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> logService.listLogEntries(request, REQUEST_ID));
         assertEquals(404, exception.getStatusCode().value());
-        assertTrue(Objects.requireNonNull(exception.getReason()).contains("File not found"));
+        assertTrue(Objects.requireNonNull(exception.getReason()).contains("not found"));
     }
 
     @Test
@@ -229,8 +245,8 @@ public class LogServiceTest {
                 "3 ERROR Critical failure",
                 "4 DEBUG Ignored event",
                 "5 ERROR Critical failure");
-        File file = tempDir.resolve(SYSLOG).toFile();
-
+        File file = tempDir.resolve(String.format("%s/%s", MAIN_DIR, SYSLOG)).toFile();
+        file.getParentFile().mkdirs();
         try (FileWriter writer = new FileWriter(file)) {
             for (String line : logList) {
                 writer.write(line + "\n");
@@ -259,7 +275,8 @@ public class LogServiceTest {
                 "3 ERROR Critical failure",
                 "4 DEBUG Ignored event",
                 "5 ERROR Critical failure");
-        File file = tempDir.resolve(MESSAGES).toFile();
+        File file = tempDir.resolve(String.format("%s/%s", MAIN_DIR, MESSAGES)).toFile();
+        file.getParentFile().mkdirs();
 
         try (FileWriter writer = new FileWriter(file)) {
             for (String line : logList) {
@@ -300,5 +317,20 @@ public class LogServiceTest {
 
         assertNotNull(response);
         assertEquals(5, response.getLogs().size());
+    }
+
+    @Test
+    public void testListLogEntries_throwsWhenOutsideOfDirectory_throwsProperError() throws IOException {
+        createOutsideLogFile(List.of("maybe sensitive information"));
+        ListEntriesRequest request = ListEntriesRequest.builder()
+                .fileName(String.format("../%s", OUTSIDE_LOG_FILE))
+                .build();
+
+        when(mockCache.isCacheable(request)).thenReturn(false);
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> logService.listLogEntries(request, REQUEST_ID));
+        assertEquals(400, exception.getStatusCode().value());
+        assertTrue(Objects.requireNonNull(exception.getReason()).contains("is not in /var/log"));
     }
 }
