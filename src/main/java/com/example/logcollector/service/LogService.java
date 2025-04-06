@@ -161,7 +161,7 @@ public class LogService {
 
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
             long filePointer = raf.length();
-            while (filePointer > 0 && linesFound < limit) {
+            while (filePointer > 0 && (linesFound < limit || !hasMore)) {
                 // This is a swallowed return. In this situation the controller already returned the proper timeout error
                 if (Thread.currentThread().isInterrupted()) {
                     return LogPage.builder().build();
